@@ -4,6 +4,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from numpy.linalg import inv
 import csv
+from scipy.interpolate import RegularGridInterpolator
 
 def readLUT(filename):
     with open(filename, 'rb') as lutfile:
@@ -23,13 +24,26 @@ def readLUT(filename):
 
 def applyLUT(img, lut):
     img_index = img / 0.030304
-    img_index = np.minimum(img_index, 32)
-    img_index = img_index.astype(int)
+    img_index = np.minimum(img_index, 32.0)
+    # img_index = img_index.astype(int)
+    x = np.linspace(0, 32, 33)
+    y = np.linspace(0, 32, 33)
+    z = np.linspace(0, 32, 33)
+    x_data, y_data, z_data = np.split(lut, 3, axis = 3)
+    x_data = np.squeeze(x_data)
+    y_data = np.squeeze(y_data)
+    z_data = np.squeeze(z_data)
+    x_interpolating_function = RegularGridInterpolator((x, y, z), x_data)
+    y_interpolating_function = RegularGridInterpolator((x, y, z), y_data)
+    z_interpolating_function = RegularGridInterpolator((x, y, z), z_data)
     result_img = np.zeros_like(img_index, dtype=np.float)
     for x in range(0, img_index.shape[0]):
         for y in range(0, img_index.shape[1]):
             select_index = img_index[x, y, :]
-            result_img[x, y, :] = lut[select_index[0], select_index[1], select_index[2], :]
+            pts = np.array([[select_index[0], select_index[1], select_index[2]]])
+            result_img[x, y, 0] = x_interpolating_function(pts)
+            result_img[x, y, 1] = y_interpolating_function(pts)
+            result_img[x, y, 2] = z_interpolating_function(pts)
             # result_img[x, y, :] = img_index[x, y, :]
     return result_img
 
@@ -119,20 +133,25 @@ cam2rgb = inv(rgb2cam)
 # print cam2rgb
 # rgb_image = cv2.merge((blue_channel, green_channel, red_channel))
 rgb_image = cv2.merge((red_channel, green_channel, blue_channel)) #rgb mode
+rgb_image = cv2.resize(rgb_image, (750, 500))
+
 lin_srgb = apply_cmatrix(rgb_image, cam2rgb)
 lin_srgb = np.maximum(np.minimum(lin_srgb, 1.0), 0.0)
 # print lin_srgb
+# lin_srgb = applyLUT(lin_srgb, readLUT(LUT_name))
 gray_image = np.dot(lin_srgb[:,:,:3], [0.299, 0.587, 0.114])
 # gray_image = cv2.cvtColor(lin_srgb.astype(np.uint8), cv2.COLOR_BGR2GRAY)
 grayscale = 0.25 / gray_image.mean()
 # print grayscale
 # cv2.imwrite("./wql_gray.tiff", grayscale * gray_image * 255)
 bright_srgb = np.minimum(1, lin_srgb * grayscale)
-nl_srgb = np.power(bright_srgb, 1/2.2)
+# nl_srgb = applyLUT(bright_srgb, readLUT(LUT_name))
+nl_srgb = np.power(bright_srgb, 1/2.0)
 
 r, g, b = cv2.split(nl_srgb)
 
 nl_srgb = cv2.merge((b,g,r))
+# nl_srgb = cv2.resize(nl_srgb, (750, 500))
 nl_srgb = applyLUT(nl_srgb, readLUT(LUT_name))
 
 cv2.imwrite("./wql_result.jpeg", nl_srgb * 255)
