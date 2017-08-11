@@ -3,6 +3,35 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from numpy.linalg import inv
+import csv
+
+def readLUT(filename):
+    with open(filename, 'rb') as lutfile:
+        LUT_table = []
+        skip_lines = 3
+        datareader = csv.reader(lutfile)
+        for i in range(skip_lines):
+            datareader.next()
+
+        for row in datareader:
+            item = map(float, row[0].split(" "))
+            LUT_table.append(item)
+        LUT_table = np.array(LUT_table)
+        # print LUT_table.shape
+        LUT_table = LUT_table.reshape((33, 33, 33, 3))
+        return LUT_table
+
+def applyLUT(img, lut):
+    img_index = img / 0.030304
+    img_index = np.minimum(img_index, 32)
+    img_index = img_index.astype(int)
+    result_img = np.zeros_like(img_index, dtype=np.float)
+    for x in range(0, img_index.shape[0]):
+        for y in range(0, img_index.shape[1]):
+            select_index = img_index[x, y, :]
+            result_img[x, y, :] = lut[select_index[0], select_index[1], select_index[2], :]
+            # result_img[x, y, :] = img_index[x, y, :]
+    return result_img
 
 def wbmask(m, n, wbmults, align):
     colormask = wbmults[1] * np.ones((m,n), np.float32)
@@ -55,6 +84,8 @@ def apply_cmatrix(img, cmatrix):
 im = Image.open("./nikond7000_iso100.tiff")
 raw_image = np.array(im)
 align = 'rggb'
+LUT_name = "./ArriLogCtoRec709.dat"
+# LUT_name = "./DJI_X5_DLOG2sRGB_Improv.cube"
 # cv2.imshow("Raw", raw_image)
 # black = 44.0
 black = 0.0
@@ -95,11 +126,13 @@ gray_image = np.dot(lin_srgb[:,:,:3], [0.299, 0.587, 0.114])
 # gray_image = cv2.cvtColor(lin_srgb.astype(np.uint8), cv2.COLOR_BGR2GRAY)
 grayscale = 0.25 / gray_image.mean()
 # print grayscale
-cv2.imwrite("./wql_gray.tiff", grayscale * gray_image * 255)
+# cv2.imwrite("./wql_gray.tiff", grayscale * gray_image * 255)
 bright_srgb = np.minimum(1, lin_srgb * grayscale)
 nl_srgb = np.power(bright_srgb, 1/2.2)
-# im = Image.fromarray(nl_srgb)
-# im.save("./wql.tiff")
+
 r, g, b = cv2.split(nl_srgb)
+
 nl_srgb = cv2.merge((b,g,r))
+nl_srgb = applyLUT(nl_srgb, readLUT(LUT_name))
+
 cv2.imwrite("./wql_result.jpeg", nl_srgb * 255)
