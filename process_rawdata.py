@@ -3,6 +3,8 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 from numpy.linalg import inv
+import subprocess
+import os
 
 def wbmask(m, n, wbmults, align):
     colormask = wbmults[1] * np.ones((m,n), np.float32)
@@ -51,6 +53,18 @@ def apply_cmatrix(img, cmatrix):
     rgb_img = cv2.merge((r, g, b))
     return rgb_img
 
+# commond_sub = ['dcraw', '-v', '-w', '-T', 'a0001-jmac_DSC1459.dng']
+commond_full = 'dcraw -v -w -T a0001-jmac_DSC1459.dng'
+# result = subprocess.check_output(commond_sub)
+# p = subprocess.Popen(commond_full, shell = True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+r = os.popen(commond_full)
+info = r.readlines()
+for line in info:
+    line = line.strip('\r\n')
+    print line + "-----"
+# result = p.communicate()[0]
+# print result + "------------"
+# print result + "------------"
 # raw_image = cv2.imread("./L1004220.tiff",0)
 im = Image.open("./nikond7000_iso100.tiff")
 raw_image = np.array(im)
@@ -72,15 +86,15 @@ balanced_bayer = np.multiply(lin_bayer, mask)
 
 red_channel, green_channel, blue_channel = demosaicing(balanced_bayer, align)
 
-rgb2xyz = np.array([[0.4124564, 0.3575761, 0.1804375],
-                     [0.2126729, 0.7151522, 0.0721750],
-                     [0.0193339, 0.1191920, 0.9503041]], np.float32)
+# rgb2xyz = np.array([[0.4124564, 0.3575761, 0.1804375],
+#                      [0.2126729, 0.7151522, 0.0721750],
+#                      [0.0193339, 0.1191920, 0.9503041]], np.float32)
 
 xyz2cam  = np.array([[8198, -2239, -724],
                      [-4871, 12389, 2798],
                      [-1043, 2050, 7181]], np.float32) #nikon D7000
 
-rgb2cam = xyz2cam * rgb2xyz
+rgb2cam = xyz2cam# * rgb2xyz
 # print rgb2cam
 rgb2cam = rgb2cam / rgb2cam.sum(axis=1)[:,None]
 # print rgb2cam
@@ -93,11 +107,11 @@ lin_srgb = np.maximum(np.minimum(lin_srgb, 1.0), 0.0)
 # print lin_srgb
 gray_image = np.dot(lin_srgb[:,:,:3], [0.299, 0.587, 0.114])
 # gray_image = cv2.cvtColor(lin_srgb.astype(np.uint8), cv2.COLOR_BGR2GRAY)
-grayscale = 0.25 / gray_image.mean()
+grayscale = 1 #0.25 / gray_image.mean()
 # print grayscale
 cv2.imwrite("./wql_gray.tiff", grayscale * gray_image * 255)
 bright_srgb = np.minimum(1, lin_srgb * grayscale)
-nl_srgb = np.power(bright_srgb, 1/2.2)
+nl_srgb = np.power(bright_srgb, 1/1)
 # im = Image.fromarray(nl_srgb)
 # im.save("./wql.tiff")
 r, g, b = cv2.split(nl_srgb)
